@@ -73,7 +73,8 @@ jobs:
               team2_win_tie = markets$winX2$v
             ) %>%
             filter(winner_bet <= max_winner_bet & min_looser_bet <= looser_bet) %>%
-            select(team1, team2, team1_win, team2_win, href)
+            select(team1, team2, team1_win, team2_win, href) %>%
+            arrange(desc(abs(team1_win - team2_win)))
           pbullet_token <- Sys.getenv("PBULLET_TOKEN")
           bets_txt <- paste(kable(bets, format = 'markdown'), collapse = '\n')
           pbPost(type = 'note', title = 'Bet', body = bets_txt, apikey = pbullet_token)
