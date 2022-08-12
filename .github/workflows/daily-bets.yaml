@@ -1,0 +1,56 @@
+on:
+  schedule:
+    - cron: "0 12 * * *"
+
+name: daily-bets
+
+jobs:
+  test-coverage:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+          r-version: '4.2.1'
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+
+      - name: Daily bets
+        env:
+          BETTINGAPI_TOKEN: ${{ secrets.BETTINGAPI_TOKEN }}
+          PBULLET_TOKEN: ${{ secrets.PBULLET_TOKEN }}
+          MAX_WINNER_BET: ${{ secrets.MAX_WINNER_BET }}
+          MIN_LOOSER_BET: ${{ secrets.MIN_LOOSER_BET }}
+        run: |
+          library(bettingapir)
+          library(dplyr)
+          library(knitr)
+          library(lubridate)
+          library(RPushbullet)
+          bettingapir_auth()
+          max_winner_bet <- as.numeric(Sys.getenv("MAX_WINNER_BET", 1.05))
+          min_looser_bet <- as.numeric(Sys.getenv("MIN_LOOSER_BET", 10))
+          bets <- get_1xbet_football_all() %>%
+            mutate(date_start = as_datetime(date_start)) %>%
+            filter(date(date_start) == today() + days(1)) %>%
+            transmute(
+              team1, team2, href,
+              team1_win = markets$win1$v,
+              team2_win = markets$win2$v,
+              winner_bet = pmin(team1_win, team2_win),
+              looser_bet = pmax(team1_win, team2_win),
+              tie = markets$winX$v,
+              team1_win_tie = markets$win1X$v,
+              team2_win_tie = markets$winX2$v
+            ) %>%
+            filter(winner_bet <= max_winner_bet & min_looser_bet <= looser_bet) %>%
+            select(team1, team2, team1_win, team2_win, href)
+          pbullet_token <- Sys.getenv("PBULLET_TOKEN")
+          bets_txt <- paste(kable(bets, format = 'markdown'), collapse = '\n')
+          pbPost(type = 'note', title = 'Bet', body = bets_txt, apikey = pbullet_token)
+        shell: Rscript {0}
